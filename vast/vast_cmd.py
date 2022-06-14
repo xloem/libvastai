@@ -1,5 +1,6 @@
 import os, requests, threading
 
+import vast
 import vast.vast_python.vast
 from .vast_python.vast import parser, api_key_guard, api_key_file_base, api_key_file, server_url_default
 
@@ -13,6 +14,7 @@ lock = threading.Lock()
 wrap_print_output = []
 def wrap_print(*params):
     global wrap_print_output
+    vast.logger.info(' '.join((str(param) for param in params)))
     wrap_print_output.append(params)
 vast.vast_python.vast.print = wrap_print
 
@@ -49,4 +51,4 @@ def vast_cmd(*argv):
                     errmsg = 'Please log in or sign up'
                 else:
                     errmsg = '(no detail message supplied)'
-            raise VastException(f'failed with error {e.response.status_code}: {errmsg}')
+            raise vast.VastException(f'failed with error {e.response.status_code}: {errmsg}')
