@@ -96,6 +96,7 @@ class Vast:
         for instance in result:
             instance['ssh_url'] = f'ssh://root@{instance["ssh_host"]}:{instance["ssh_port"]}'
             instance['scp_url'] = f'scp://root@{instance["ssh_host"]}:{instance["ssh_port"]}'
+        return result
 
     def ssh_url(self):
         '''ssh url helper'''
@@ -188,7 +189,7 @@ class Vast:
             expect='bids created for machine '
         )
 
-    def create(self, instance_id, price=None, disk_GB=10, image=None, label=None, onstart=None, onstart_cmd=None, jupyter=False, jupyter_dir=None, jupyter_lab=False, lang_utf8=False, python_utf8=False, extra=None, create_from=None, force=False):
+    def create(self, offer_id, price=None, disk_GB=10, image=None, label=None, onstart=None, onstart_cmd=None, jupyter=False, jupyter_dir=None, jupyter_lab=False, lang_utf8=False, python_utf8=False, extra=None, create_from=None, force=False):
         '''
         Create a new instance
         Performs the same action as pressing the "RENT" button on the website at https://vast.ai/console/create/.
@@ -248,10 +249,6 @@ class Vast:
         
         printlines, tables = vast_cmd(*params)
 
-        if expect is not None and not printlines[-1].startswith(expect):
+        if expect is not None and not str(printlines[-1][0]).startswith(expect):
             raise VastException(*printlines)
         return printlines, tables
-
-if __name__ == '__main__':
-    for offer in Vast().search_offers():
-        print(offer)
