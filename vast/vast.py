@@ -1,6 +1,6 @@
 from . import VastException
 from .vast_cmd import vast_cmd, server_url_default
-import threading
+import json, threading
 
 class Vast:
     def __init__(self, url = server_url_default, key = None, identity = None):
@@ -22,12 +22,12 @@ class Vast:
         if identity is None:
             identity = self.identity
 
-        printlines, table = self.cmd('copy', src, dest, identity = identity)
+        printlines, tables = self.cmd('copy', src, dest, identity = identity)
 
         if not printlines[-1].startswith('Remote to Remote copy initiated'):
             raise VastException(*printlines[-2:])
 
-    def search_offers(self, type = 'on-demand', bundling = True, pricing_storage_GiB = 5.0, sort_fields = ('score-',), query = 'external=false rentable=true verified=true'):
+    def offers(self, type = 'on-demand', bundling = True, pricing_storage_GiB = 5.0, sort_fields = ('score-',), query = 'external=false rentable=true verified=true'):
         '''
         Search for instance types using custom query
 
@@ -81,15 +81,62 @@ class Vast:
             verified:               bool      is the machine verified
         '''
 
-        printlines, table = self.cmd('search', 'offers', '--no-default', *query.split(' '), disable_bundle = not bundling, type = type, storage = pricing_storage_GiB, order = ','.join(sort_fields))
+        printlines, tables = self.cmd('search', 'offers', '--no-default', *query.split(' '), disable_bundling = not bundling, type = type, storage = pricing_storage_GiB, order = ','.join(sort_fields), mutate_hyphens = True)
 
         if len(printlines):
             raise VastException(*printlines)
 
-        return table[0][0]
+        return tables[0][0]
 
+    def instances(self):
+        '''The stats on the machines the user is renting.'''
+        
+        printlines, tables = self.cmd('show', 'instances')       
+        result = tables[0][0]
+        for instance in result:
+            instance['ssh_url'] = f'ssh://root@{instance["ssh_host"]}:{instance["ssh_port"]}'
+            instance['scp_url'] = f'scp://root@{instance["ssh_host"]}:{instance["ssh_port"]}'
 
-    def cmd(self, *params, **kwparams):
+    def ssh_url(self):
+        '''ssh url helper'''
+        printlines, tables = self.cmd('ssh-url')
+        
+        if 'ssh://' not in printlines[0]:
+            raise VastException(*printlines)
+        else:
+            return printlines[0]
+
+    def scp_url(self):
+        '''scp url helper'''
+        printlines, tables = self.cmd('ssh-url')
+        
+        if 'scp://' not in printlines[0]:
+            raise VastException(*printlines)
+        else:
+            return printlines[0]
+
+    def machines(self, ids_only=False):
+        '''Show the machines user is offering for rent.'''
+        printlines, tables = self.cmd('show', 'machines', quiet=ids_only)
+
+        if ids_only:
+            return [int(id) for id in printlines]
+        else:
+            return [json.loads(line.split(': ', 1)) for line in printlines[1:]]
+
+    def invoices(self, start_date, end_date, only_charges=False, only_credits=False, ids_only=False):
+        '''
+        Show current payments and charges. Various options available to limit time range and type
+        of items. Default is to show everything for user's entire billing history.
+
+        Returns history, current_charges
+        '''
+        printlines, tables = self.cmd('show', 'invoices', quiet=ids_only, start_date=start_date, end_date=end_date, only_charges=only_charges, only_credits=only_credits)
+        current_charges = json.loads(printlines[-1].split(': ', 1)[1])
+        return tables[0][0], current_charges
+        
+
+    def cmd(self, *params, mutate_hyphens = False, **kwparams):
         '''
         Directly executes the passed vast_python library command, returning print and table output as
         a 2-tuple of lists.
@@ -102,9 +149,14 @@ class Vast:
         else:
             params = ['--url', self.url, *params]
 
-        params.extend((f'--{key.replace("_","-")}' for key, val in kwparams.items() if val is True))
+        if mutate_hyphens:
+            mutate_hyphens = lambda str: str.replace('_','-')
+        else:
+            mutate_hyphens = lambda str: str
 
-        params.extend((str(param) for key, val in kwparams.items() if val not in (None, True, False) for param in (f'--{key.replace("_","-")}', val)))
+        params.extend((f'--{mutate_hyphens(key)}' for key, val in kwparams.items() if val is True))
+
+        params.extend((str(param) for key, val in kwparams.items() if val not in (None, True, False) for param in (f'--{mutate_hyphens(key)}', val)))
         
         return vast_cmd(*params)
 
