@@ -124,7 +124,7 @@ class Vast:
         else:
             return [json.loads(line.split(': ', 1)) for line in printlines[1:]]
 
-    def invoices(self, start_date, end_date, only_charges=False, only_credits=False, ids_only=False):
+    def invoices(self, start_date = None, end_date = None, only_charges=False, only_credits=False, ids_only=False):
         '''
         Show current payments and charges. Various options available to limit time range and type
         of items. Default is to show everything for user's entire billing history.
@@ -132,7 +132,7 @@ class Vast:
         Returns history, current_charges
         '''
         printlines, tables = self.cmd('show', 'invoices', quiet=ids_only, start_date=start_date, end_date=end_date, only_charges=only_charges, only_credits=only_credits)
-        current_charges = json.loads(printlines[-1].split(': ', 1)[1])
+        current_charges = printlines[-1][1]
         return tables[0][0], current_charges
         
 
