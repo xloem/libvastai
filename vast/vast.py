@@ -22,12 +22,9 @@ class Vast:
         if identity is None:
             identity = self.identity
 
-        printlines, tables = self.cmd('copy', src, dest, identity = identity)
+        self.cmd('copy', src, dest, identity = identity, expect='Remote to Remote copy initiated')
 
-        if not printlines[-1].startswith('Remote to Remote copy initiated'):
-            raise VastException(*printlines[-2:])
-
-    def offers(self, type = 'on-demand', bundling = True, pricing_storage_GiB = 5.0, sort_fields = ('score-',), query = 'external=false rentable=true verified=true'):
+    def offers(self, instance_type = 'on-demand', bundling = True, pricing_storage_GiB = 5.0, sort = ('score-',), query = 'external=false rentable=true verified=true'):
         '''
         Search for instance types using custom query
 
@@ -81,7 +78,10 @@ class Vast:
             verified:               bool      is the machine verified
         '''
 
-        printlines, tables = self.cmd('search', 'offers', '--no-default', *query.split(' '), disable_bundling = not bundling, type = type, storage = pricing_storage_GiB, order = ','.join(sort_fields), mutate_hyphens = True)
+        if type(sort) is not str:
+            sort = ','.join(sort)
+
+        printlines, tables = self.cmd('search', 'offers', '--no-default', *query.split(' '), disable_bundling = not bundling, type = instance_type, storage = pricing_storage_GiB, order = sort, mutate_hyphens = True)
 
         if len(printlines):
             raise VastException(*printlines)
@@ -124,19 +124,107 @@ class Vast:
         else:
             return [json.loads(line.split(': ', 1)) for line in printlines[1:]]
 
-    def invoices(self, start_date = None, end_date = None, only_charges=False, only_credits=False, ids_only=False):
+    def invoices(self, start_date = None, end_date = None, only_charges=False, only_credits=False):
         '''
         Show current payments and charges. Various options available to limit time range and type
         of items. Default is to show everything for user's entire billing history.
 
         Returns history, current_charges
         '''
-        printlines, tables = self.cmd('show', 'invoices', quiet=ids_only, start_date=start_date, end_date=end_date, only_charges=only_charges, only_credits=only_credits)
+        printlines, tables = self.cmd('show', 'invoices', start_date=start_date, end_date=end_date, only_charges=only_charges, only_credits=only_credits)
         current_charges = printlines[-1][1]
         return tables[0][0], current_charges
+
+    def user(self):
+        '''Stats for logged-in user.'''
+        printlines, tables = self.cmd('show', 'user')
+        return tables[0][0][0]
+
+    #def pdf_invoices(self, start_date = None, end_date = None, only_charges=False, only_credits=False):
+    #    '''
+    #    Makes a PDF version of the data returned by the "show invoices" command. Takes the same args as that
+    #    command.
+    #    '''
+
+    def list_machine(self, id=None, price_gpu=None, price_disk=None, price_inetu=None, price_inetd=None, min_chunk=None, end_timestamp=None):
+        '''[Host] list a machine for rent'''
+        self.cmd('list', 'machine',
+            id, price_gpu=price_gpu, price_disk=price_disk,
+            price_inetu=price_inetu, price_inetd=price_inetd,
+            min_chunk=min_chunk, end_date=end_date,
+            expect = 'offers created')
+
+    def unlist_machine(self, id):
+        '''[Host] Removes machine from list of machines for rent.'''
+        self.cmd('unlist', 'machine', id, expect='all offers for machine')
+
+    def remove_defjob(self, id):
+        '''[Host] Delete default jobs'''
+        self.cmd('remove', 'defjob', id, expect='default instances for machine')
+
+    def start(self, instance_id):
+        '''Start a stopped instance'''
+        self.cmd('start', 'instance', instance_id, expect='starting instance')
+
+    def stop(self, instance_id):
+        '''Stop a running instance'''
+        self.cmd('stop', 'instance', instance_id, expect='stopping instance ')
+
+    def label(self, instance_id, label):
+        '''Assign a string label to an instance'''
+        self.cmd('label', 'instance', instance_id, label, expect='label for ')
+
+    def destroy(self, instance_id):
+        '''
+        Destroy an instance (irreversible, deletes data)
+        Perfoms the same action as pressing the "DESTROY" button on the website at https://vast.ai/console/instances/.
+        '''
+        self.cmd('destroy', 'instance', instance_id, expect='destroying instance ')
+
+    def set_defjob(self, id, price_gpu=None, price_inetu=None, price_inetd=None, image=None, args=None):
+        '''[Host] Create default jobs for a machine'''
+        self.cmd('set', 'defjob', id,
+            price_gpu=price_gpu, price_inetu=price_inetu, price_inetd=price_inetd, image=image, args=args,
+            expect='bids created for machine '
+        )
+
+    def create(self, instance_id, price=None, disk_GB=10, image=None, label=None, onstart=None, onstart_cmd=None, jupyter=False, jupyter_dir=None, jupyter_lab=False, lang_utf8=False, python_utf8=False, extra=None, create_from=None, force=False):
+        '''
+        Create a new instance
+        Performs the same action as pressing the "RENT" button on the website at https://vast.ai/console/create/.
+        '''
+        self.cmd('create', 'instance', instance_id,
+            price=price, disk=disk_GB, image=image, label=label, onstart=onstart, onstart_cmd=onstart_cmd,
+            jupyter=jupyter, jupyter_dir=jupyter_dir, jupyter_lab=jupyter_lab, lang_utf8=lang_utf8,
+            python_utf8=python_utf8, extra=extra, create_from=create_from, force=force,
+            mutate_hyphens=True, expect='Started. ')
+
+    def change_bid(self, instance_id, price=None):
+        '''
+        Change the bid price for a spot/interruptible instance
+
+        If PRICE is not specified, then a winning bid price is used as the default.
+        '''
+        self.cmd('change', 'bid', price=price, expect='Per gpu bid price changed')
+
+    def set_min_bid(self, machine_id, price=None):
+        '''
+        [Host] Set the minimum bid/rental price for a machine
+
+        Change the current min bid price of machine id to PRICE.
+        '''
+        self.cmd('set', 'min_bid', machine_id, price=price, expect='Per gpu min bid price changed')
+
+    def set_key(self, new_api_key):
+        '''
+        Set api-key (get your api-key from the console/CLI)
+
+        Caution: a bad API key will make it impossible to connect to the servers.
+        '''
+        self.cmd('set', 'api_key', new_api_key, expect='Your api key has been saved in ')
         
 
-    def cmd(self, *params, mutate_hyphens = False, **kwparams):
+    def cmd(self, *params, mutate_hyphens = False, expect = None, **kwparams):
         '''
         Directly executes the passed vast_python library command, returning print and table output as
         a 2-tuple of lists.
@@ -158,7 +246,11 @@ class Vast:
 
         params.extend((str(param) for key, val in kwparams.items() if val not in (None, True, False) for param in (f'--{mutate_hyphens(key)}', val)))
         
-        return vast_cmd(*params)
+        printlines, tables = vast_cmd(*params)
+
+        if expect is not None and not printlines[-1].startswith(expect):
+            raise VastException(*printlines)
+        return printlines, tables
 
 if __name__ == '__main__':
     for offer in Vast().search_offers():

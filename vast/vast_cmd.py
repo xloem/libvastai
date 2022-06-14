@@ -33,6 +33,7 @@ def gather_wrapped(args):
     return result
 
 def vast_cmd(*argv):
+    vast.logger.info('vast.py ' + ' '.join((str(param) for param in argv)))
     with lock:
         args = parser.parse_args(argv=argv)
         if args.api_key is api_key_guard:
