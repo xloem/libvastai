@@ -1,4 +1,4 @@
-from . import Vast, logger
+from . import Vast, VastException, logger
 
 import asyncio, time
 
@@ -33,13 +33,13 @@ class Instance:
     def update_attributes(self):
         if self.created:
             attrs = [instance for instance in self.vast.instances() if instance['machine_id'] == self.machine_id or instance['id'] == self.id][0]
+            if attrs['status_msg'] is None:
+                attrs['status_msg'] = 'Processing request ...'
+            attrs['status_msg'] = attrs['status_msg'].strip()
+            if attrs['actual_status'] is None:
+                attrs['actual_status'] = 'loading'
             if not hasattr(self, 'status_msg') or attrs['status_msg'] != self.status_msg or attrs['actual_status'] != self.actual_status:
                 
-                if attrs['status_msg'] is None:
-                    attrs['status_msg'] = 'Processing request ...'
-                if attrs['actual_status'] is None:
-                    attrs['actual_status'] = 'loading'
-                attrs['status_msg'] = attrs['status_msg'].strip()
                 status_msg = attrs['status_msg']
                 logmsg = f'{attrs["machine_id"]}: {attrs["actual_status"]}->{attrs["next_state"]}: {status_msg}'
                 if 'error' in status_msg or 'Error' in status_msg:
@@ -55,7 +55,7 @@ class Instance:
 
     def create(self):
         assert self.id is None
-        offer = self.vast.offers(self._instance_type, pricing_storage_GiB = self._GiB, sort = 'dph_total', query = self._query)[0]
+        self.offer = self.vast.offers(self._instance_type, pricing_storage_GiB = self._GiB, sort = 'dph_total', query = self._query)[0]
         self.machine_id = offer['machine_id']
         self.id = self.vast.create(offer['id'], disk_GB=self._GiB, image=self._image)
         return self.update_attributes()
@@ -102,7 +102,11 @@ class Instance:
             method = getattr(self, attr[1:])
             async def wrapper(*params, **kwparams):
                 result = method(*params, **kwparams)
-                await self.async_wait()
+                try:
+                    await self.async_wait()
+                except:
+                    await self.destroy()
+                    raise
                 return result
             return wrapper
         else:
