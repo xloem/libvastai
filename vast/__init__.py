@@ -1,1 +1,1 @@
-from .vast import Vast
+from .vast import Vast, vast_cmd

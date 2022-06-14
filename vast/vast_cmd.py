@@ -1,7 +1,7 @@
-import threading
+import os, requests, threading
 
-import vast_python.vast
-from vast_python.vast import parser, api_key_guard, api_key_file, server_url_default
+import vast.vast_python.vast
+from .vast_python.vast import parser, api_key_guard, api_key_file_base, api_key_file, server_url_default
 
 parser.add_argument('--url', help='server REST api url', default=server_url_default)
 parser.add_argument('--raw', action='store_true', help='output machine-readable json');
@@ -14,11 +14,13 @@ wrap_print_output = []
 def wrap_print(*params):
     global wrap_print_output
     wrap_print_output.append(params)
+vast.vast_python.vast.print = wrap_print
 
 wrap_display_table_output = []
 def wrap_display_table(records : list, field_details):
     global wrap_display_table_output
-    wrap_display_table_output.append(records, field_details)
+    wrap_display_table_output.append((records, field_details))
+vast.vast_python.vast.display_table = wrap_display_table
 
 def gather_wrapped(args):
     global wrap_print_output, wrap_display_table_output
