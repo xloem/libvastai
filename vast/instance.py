@@ -34,7 +34,19 @@ class Instance:
         if self.created:
             attrs = [instance for instance in self.vast.instances() if instance['machine_id'] == self.machine_id or instance['id'] == self.id][0]
             if not hasattr(self, 'status_msg') or attrs['status_msg'] != self.status_msg or attrs['actual_status'] != self.actual_status:
-                logger.info(f'{attrs["machine_id"]}: {attrs["actual_status"]}->{attrs["next_state"]}: {attrs["status_msg"].strip()}')
+                
+                if attrs['status_msg'] is None:
+                    attrs['status_msg'] = 'Processing request ...'
+                if attrs['actual_status'] is None:
+                    attrs['actual_status'] = 'loading'
+                attrs['status_msg'] = attrs['status_msg'].strip()
+                status_msg = attrs['status_msg']
+                logmsg = f'{attrs["machine_id"]}: {attrs["actual_status"]}->{attrs["next_state"]}: {status_msg}'
+                if 'error' in status_msg or 'Error' in status_msg:
+                    logger.error(logmsg)
+                    raise VastException(status_msg)
+                else:
+                    logger.info(logmsg)
             for key, value in attrs.items():
                 setattr(self, key, value)
             return attrs
@@ -61,11 +73,17 @@ class Instance:
 
     def stop(self):
         self.vast.stop(self.id)
+        self.update_attributes()
 
-    def wait(self):
+    def wait(self, for_status = None):
         if not self.created:
             return
-        while self.actual_status != self.intended_status and self.created:
+        attrs = None
+        while (
+                ((for_status is None and self.actual_status != self.intended_status)
+                    or (for_status is not None and self.actual_status != for_status))
+                and self.created
+        ):
             time.sleep(4)
             attrs = self.update_attributes()
         return attrs

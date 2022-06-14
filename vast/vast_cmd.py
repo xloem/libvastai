@@ -1,4 +1,4 @@
-import os, requests, threading
+import os, requests, threading, time
 
 import vast
 import vast.vast_python.vast
@@ -34,22 +34,26 @@ def gather_wrapped(args):
 
 def vast_cmd(*argv):
     vast.logger.debug('vast.py ' + ' '.join((str(param) for param in argv)))
-    with lock:
-        args = parser.parse_args(argv=argv)
-        if args.api_key is api_key_guard:
-            if os.path.exists(api_key_file):
-                with open(api_key_file, 'r') as reader:
-                    args.api_key = reader.read().strip()
-            else:
-                args.api_key = None
-        try:
-            return gather_wrapped(args)
-        except requests.exceptions.HTTPError as e:
-            try:
-                errmsg = e.response.json().get('msg');
-            except JSONDecodeError:
-                if e.response.status_code == 401:
-                    errmsg = 'Please log in or sign up'
+    while True:
+        with lock:
+            args = parser.parse_args(argv=argv)
+            if args.api_key is api_key_guard:
+                if os.path.exists(api_key_file):
+                    with open(api_key_file, 'r') as reader:
+                        args.api_key = reader.read().strip()
                 else:
-                    errmsg = '(no detail message supplied)'
-            raise vast.VastException(f'failed with error {e.response.status_code}: {errmsg}')
+                    args.api_key = None
+            try:
+                return gather_wrapped(args)
+            except requests.exceptions.HTTPError as e:
+                try:
+                    errmsg = e.response.json().get('msg');
+                except JSONDecodeError:
+                    if e.response.status_code == 401:
+                        errmsg = 'Please log in or sign up'
+                    elif e.response.status_code == 429: # rate limit
+                        time.sleep(1)
+                        continue
+                    else:
+                        errmsg = '(no detail message supplied)'
+                raise vast.VastException(f'failed with error {e.response.status_code}: {errmsg}')
