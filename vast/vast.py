@@ -1,7 +1,9 @@
 from . import VastException
 from .vast_cmd import vast_cmd, server_url_default
+#from .instance import Instance
 import json, threading
 
+# this should change into a VastAPI class, and then a Vast class could model Instances with objects, and update their properties all at once.
 class Vast:
     def __init__(self, url = server_url_default, key = None, identity = None):
         self.url = url
@@ -182,6 +184,10 @@ class Vast:
         '''
         self.cmd('destroy', 'instance', instance_id, expect='destroying instance ')
 
+    def destroy_all(self):
+        for instance in self.instances():
+            self.destroy(instance['id'])
+
     def set_defjob(self, id, price_gpu=None, price_inetu=None, price_inetd=None, image=None, args=None):
         '''[Host] Create default jobs for a machine'''
         self.cmd('set', 'defjob', id,
@@ -189,16 +195,17 @@ class Vast:
             expect='bids created for machine '
         )
 
-    def create(self, offer_id, price=None, disk_GB=10, image=None, label=None, onstart=None, onstart_cmd=None, jupyter=False, jupyter_dir=None, jupyter_lab=False, lang_utf8=False, python_utf8=False, extra=None, create_from=None, force=False):
+    def create(self, offer_id, image, disk_GB=10, price=None, label=None, onstart='', onstart_cmd=None, jupyter=False, jupyter_dir=None, jupyter_lab=False, lang_utf8=False, python_utf8=False, extra=None, create_from=None, force=False):
         '''
         Create a new instance
         Performs the same action as pressing the "RENT" button on the website at https://vast.ai/console/create/.
         '''
-        self.cmd('create', 'instance', instance_id,
+        printlines, tables = self.cmd('create', 'instance', offer_id,
             price=price, disk=disk_GB, image=image, label=label, onstart=onstart, onstart_cmd=onstart_cmd,
             jupyter=jupyter, jupyter_dir=jupyter_dir, jupyter_lab=jupyter_lab, lang_utf8=lang_utf8,
             python_utf8=python_utf8, extra=extra, create_from=create_from, force=force,
             mutate_hyphens=True, expect='Started. ')
+        return eval(printlines[-1][0].split(' ',1)[1])['new_contract']
 
     def change_bid(self, instance_id, price=None):
         '''

@@ -2,7 +2,7 @@ import os, requests, threading
 
 import vast
 import vast.vast_python.vast
-from .vast_python.vast import parser, api_key_guard, api_key_file_base, api_key_file, server_url_default
+from .vast_python.vast import parser, api_key_guard, api_key_file_base, api_key_file, server_url_default, JSONDecodeError
 
 parser.add_argument('--url', help='server REST api url', default=server_url_default)
 parser.add_argument('--raw', action='store_true', help='output machine-readable json');
@@ -14,7 +14,7 @@ lock = threading.Lock()
 wrap_print_output = []
 def wrap_print(*params):
     global wrap_print_output
-    vast.logger.info(' '.join((str(param) for param in params)))
+    vast.logger.debug(' '.join((str(param) for param in params)))
     wrap_print_output.append(params)
 vast.vast_python.vast.print = wrap_print
 
@@ -33,7 +33,7 @@ def gather_wrapped(args):
     return result
 
 def vast_cmd(*argv):
-    vast.logger.info('vast.py ' + ' '.join((str(param) for param in argv)))
+    vast.logger.debug('vast.py ' + ' '.join((str(param) for param in argv)))
     with lock:
         args = parser.parse_args(argv=argv)
         if args.api_key is api_key_guard:
