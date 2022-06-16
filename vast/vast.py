@@ -1,7 +1,7 @@
 from . import VastException
-from .vast_cmd import vast_cmd, server_url_default
+from .vast_cmd import vast_cmd, handle_httperror, server_url_default
 #from .instance import Instance
-import json, threading
+import json, requests, threading
 
 # this should change into a VastAPI class, and then a Vast class could model Instances with objects, and update their properties all at once.
 class Vast:
@@ -231,13 +231,26 @@ class Vast:
         '''
         self.cmd('set', 'api_key', new_api_key, expect='Your api key has been saved in ')
         
+    def docker_tags(self, image):
+        while True:
+            try:
+                response = requests.get(f'{self.url}/docker/tags/?repo={image}')
+                break
+            except requests.exceptions.HTTPError as e:
+                if handle_httperror(e):
+                    continue
+        return response.json()
 
-    def cmd(self, *params, mutate_hyphens = False, expect = None, **kwparams):
-        '''
-        Directly executes the passed vast_python library command, returning print and table output as
-        a 2-tuple of lists.
-        '''
-
+    def offer_bid_price(self, offer_id):
+        while True:
+            try:
+                response = requests.put(f'{self.url}/bundles_bid_price/{offer_id}/', json={})
+            except requests.exceptions.HTTPError as e:
+                if handle_httperror(e):
+                    continue
+        return float(response.text)
+        
+    def params2args(self, *params, mutate_hyphens = False, **kwparams):
         params = (str(param) for param in params)
     
         if self.key is not None:
@@ -253,6 +266,16 @@ class Vast:
         params.extend((f'--{mutate_hyphens(key)}' for key, val in kwparams.items() if val is True))
 
         params.extend((str(param) for key, val in kwparams.items() if val not in (None, True, False) for param in (f'--{mutate_hyphens(key)}', val)))
+
+        return params
+
+    def cmd(self, *params, mutate_hyphens = False, expect = None, **kwparams):
+        '''
+        Directly executes the passed vast_python library command, returning print and table output as
+        a 2-tuple of lists.
+        '''
+
+        params = self.params2args(*params, mutate_hyphens = mutate_hyphens, **kwparams)
         
         printlines, tables = vast_cmd(*params)
 

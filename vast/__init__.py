@@ -6,4 +6,5 @@ class VastException(Exception):
     pass
 
 from .vast import Vast, vast_cmd
+from .instance import Instance
 
