@@ -213,7 +213,7 @@ class Vast:
 
         If PRICE is not specified, then a winning bid price is used as the default.
         '''
-        self.cmd('change', 'bid', price=price, expect='Per gpu bid price changed')
+        self.cmd('change', 'bid', instance_id, price=price, expect='Per gpu bid price changed')
 
     def set_min_bid(self, machine_id, price=None):
         '''

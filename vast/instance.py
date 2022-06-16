@@ -1,15 +1,17 @@
 from . import Vast, VastException, logger
 
-import asyncio, socket, time
+import asyncio, io, socket, time
 
 class Instance:
-    def __init__(self, instance_id = None, machine_id = None, vast = None, query = 'external=false rentable=true verified=true machine_id!=1742', api_key = None, instance_type = 'interruptible', GiB = 5.0, image = 'pytorch/pytorch:latest'):
+    # to blacklist machines add machine_id!=<machine_id> to query
+    def __init__(self, instance_id = None, machine_id = None, vast = None, query = 'inet_down>=200', api_key = None, instance_type = 'interruptible', GiB = 5.0, image = 'pytorch/pytorch:latest'):#, rebid = True):
         if vast is None:
             vast = Vast(key = api_key)
         
         self.vast = vast
         self.machine_id = machine_id
         self.id = instance_id
+        #self.rebid = rebid
         self._query = query
         self._instance_type = instance_type
         self._GiB = GiB
@@ -45,6 +47,26 @@ class Instance:
         finally:
             sock.close()
 
+    #def invoke_run(self, connection, *params, **kwparams):
+    #    io.BufferedRWPair(
+    #    connection.run(*params, **kwparams)
+
+    #def execute(self, function, *requirements):
+    #    import cloudpickle, fabric
+    #    class TextStream:
+    #        def __init__(self):
+    #            self.buffer = io.StringIO()
+    #        def write(self, data):
+    #            self.buffer.write(
+    #    try:
+    #        self.create()
+    #        self.wait()
+    #        with fabric.Connection(self.ssh_host, 'root', self.ssh_port) as connection:
+    #            connection.run('pip3 install cloudpickle ' + ' '.join(requirements))
+    #            connection.run('python3'
+    #    finally:
+    #        self.destroy()
+
     def update_attributes(self):
         if self.created:
             attrs = [instance for instance in self.vast.instances() if instance['machine_id'] == self.machine_id or instance['id'] == self.id][0]
@@ -64,6 +86,8 @@ class Instance:
                     logger.info(logmsg)
             for key, value in attrs.items():
                 setattr(self, key, value)
+            self.outbid = self.min_bid + 0.0001 > self.dph_total and self.is_bid
+            self.max_cost = self.dph_total / 3600 * (time.time() - self.start_date)
             return attrs
         else:
             return None
@@ -80,14 +104,14 @@ class Instance:
     @property
     def compatibility_query(self):
         tags = self.docker_tags
-        query = []
+        query = ['rentable=true']
         min_cuda = tags.get('min_cuda')
         if min_cuda:
             query.append(f'cuda_max_good>={min_cuda}')
         max_cuda = tags.get('max_cuda')
         if max_cuda:
             query.append(f'cuda_max_good<={max_cuda}')
-        extra_filters = tags.get('extra_filters', {})
+        extra_filters = tags.get('extra_filters') or {}
         for prop, filter in extra_filters.items():
             for op, value in filter.items():
                 query.append(f'{prop} {op} {value}')
@@ -106,13 +130,17 @@ class Instance:
         else:
             if price is None:
                 #price = selef.vast.offer_bid_price(self.offer['id'])
-                price = self.offer['min_bid'] + 0.001
+                price = self.offer['min_bid'] + 0.0001
         self.id = self.vast.create(self.offer['id'], disk_GB=self._GiB, image=self._image, price=price)
         return self.update_attributes()
 
     def destroy(self):
         if self.id is not None:
             self.vast.destroy(self.id)
+            self.end_time = time.time()
+            hours = (self.end_time - self.start_date) / 3600
+            self.max_cost = self.dph_total * hours
+            logger.warning(f'{self.id} max cost was ${round(self.max_cost*100) / 100} for {hours}h')
             self.id = None
 
     def start(self):
@@ -138,6 +166,13 @@ class Instance:
         ):
             time.sleep(4)
             attrs = self.update_attributes()
+            if self.outbid:
+                #if self.rebid:
+                #    new_bid = self.min_bid + 0.0001
+                #    logger.warning(f'Outbid, raising bid to ${new_bid}/h.')
+                #    self.vast.change_bid(self.id, new_bid)
+                #else:
+                    raise VastException('outbid')
         return attrs
 
     async def async_wait(self, for_status = None):
