@@ -28,6 +28,9 @@ setup(
     'Operating System :: OS Independent',
   ],
   packages = find_packages(),
+  package_data = {
+    'vast': ['vast_python/*.py']
+  },
   install_requires=[
     'requests', # used by vast_python to connect to the api server
     'borb' # vast_python imports this for generating pdfs, not presently used
