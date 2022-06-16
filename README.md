@@ -1,6 +1,6 @@
 # libvastai
 
-[https://vast.au/] is service for connecting renters and hosts of machines with powerful GPUs together.
+[https://vast.ai/] is service for connecting renters and hosts of machines with powerful GPUs together.
 
 This library provides a partial programmatic interface to their api for renting and selling system time.
 
