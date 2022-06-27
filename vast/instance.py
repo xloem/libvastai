@@ -4,7 +4,7 @@ import asyncio, io, socket, time
 
 class Instance:
     # to blacklist machines add machine_id!=<machine_id> to query
-    def __init__(self, instance_id = None, machine_id = None, vast = None, query = 'inet_down>=200', api_key = None, instance_type = 'interruptible', GiB = 5.0, image = 'pytorch/pytorch:latest'):#, rebid = True):
+    def __init__(self, instance_id = None, machine_id = None, vast = None, query = 'inet_down>=200', sort = 'dph_total', api_key = None, instance_type = 'interruptible', GiB = 5.0, image = 'pytorch/pytorch:latest'):#, rebid = True):
         if vast is None:
             vast = Vast(key = api_key)
         
@@ -13,6 +13,7 @@ class Instance:
         self.id = instance_id
         #self.rebid = rebid
         self._query = query
+        self._sort = sort
         self._instance_type = instance_type
         self._GiB = GiB
         self._image = image
@@ -81,7 +82,7 @@ class Instance:
                 
                 status_msg = attrs['status_msg']
                 logmsg = f'{attrs["machine_id"]}: {attrs["actual_status"]}->{attrs["next_state"]}: {status_msg}'
-                if 'error' in status_msg or 'Error' in status_msg:
+                if 'Error' in status_msg: # note it also displays package names containing the word 'error'
                     logger.error(logmsg)
                     raise VastException(status_msg)
                 else:
@@ -123,7 +124,7 @@ class Instance:
         assert self.id is None
         if offer is None:
             query = self.compatibility_query + ' ' + self._query
-            self.offer = self.vast.offers(self._instance_type, pricing_storage_GiB = self._GiB, sort = 'dph_total', query = query)[0]
+            self.offer = self.vast.offers(self._instance_type, pricing_storage_GiB = self._GiB, sort = self._sort, query = query)[0]
         else:
             self.offer = offer
         self.machine_id = self.offer['machine_id']
@@ -176,6 +177,17 @@ class Instance:
                 #else:
                     raise VastException('outbid')
         return attrs
+
+    def upload(self, src_path, dst_path):
+        return self.vast.copy(src_path, (self.instance_id, dst_path))
+
+    def download(self, src_path, dst_path):
+        return self.vast.copy((self.instance_id, src_path), dst_path)
+
+    def transfer(self, src_path, instance, dst_path):
+        if isinstance(instance, Instance):
+            instance = instance.instance_id
+        return self.vast.copy((self.instance_id, src_path), (instance, dst_path))
 
     async def async_wait(self, for_status = None):
         if not self.created:
