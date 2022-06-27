@@ -19,7 +19,7 @@ class Instance:
 
         if self.id is not None or self.machine_id is not None:
             instances = self.vast.instances()
-            if self.id < len(instances) and self.machine_id is None:
+            if self.id is not None and self.id < len(instances) and self.machine_id is None:
                 self.id = instances[0]['id']
                 self.machine_id = instances[0]['machine_id']
             else:
@@ -44,6 +44,8 @@ class Instance:
         try:
             result = sock.connect_ex((self.ssh_host, self.ssh_port))
             return result == 0
+        except:
+            return False
         finally:
             sock.close()
 
